@@ -1,0 +1,65 @@
+<html>
+    <head>
+        <style>
+            body {
+                background-color: black;
+            }
+            #counter {
+                text-align: center;
+                color: white;
+                font-weight: bold;
+            }
+            #back {
+                position: fixed;
+                bottom: 0px;
+                margin: 10px;
+            }
+            #sub {
+                position: fixed;
+                left: 50%;
+                transform: translateX(-50%);
+                bottom: 0px;
+                margin-bottom: 10px;
+            }
+            #next {
+                position: fixed;
+                bottom: 0px;
+                right: 0px;
+                margin: 10px;
+            }
+            #img {
+                position: fixed;
+                display: block;
+                left: 50%;
+                top: 50%;
+                transform: translateX(-50%) translateY(-50%);
+                max-width: 640px;
+                max-height: 480px;
+                width: auto;
+                height: auto;
+            }
+            #loading {
+                position: fixed;
+                display: block;
+                left: 50%;
+                top: 50%;
+                transform: translateX(-50%) translateY(-50%);
+                width: auto;
+                height: auto;
+                visibility: hidden;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="counter"></div>
+        <img id="img" alt="" />
+        <img id="loading" src="/images/loading.svg" />
+        <button id="back" type="button">Back</button>
+        <select id="sub" title="sub category">
+            <option>happy</option>
+            <option>cute</option>
+        </select>
+        <button id="next" type="button">Next</button>
+        <script defer src="index.js"></script>
+    </body>
+</html>
