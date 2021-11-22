@@ -1,4 +1,10 @@
-# Reddit Image Viewer
+# Rx Observable Demo
+
+This demo is based on a task from another Rx exercise repo, see below for details. This repo has an example implementation of a solution for the problem using observables, however it is not the only way to do it.
+
+Use `npm start` to view in dev mode with hot reloading.
+
+# Reddit Image Viewer (Original)
 (see https://github.com/jhusain/reddit-image-viewer for original)
 
 In this exercise we'll create an image viewer for Reddit subs.
