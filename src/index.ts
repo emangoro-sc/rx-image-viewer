@@ -10,21 +10,21 @@ enum KeyCodes {
 enum UserAction {
     Next = "next",
     Previous = "previous",
-    ChangeSub = "changeSub",
+    ChangeCategory = "changeCategory",
 }
 
 const nextButtonElement = document.getElementById("next");
 const backButtonElement = document.getElementById("back");
-const subSelectElement = document.getElementById("sub") as HTMLSelectElement;
-const currentImageElement = document.getElementById("img") as HTMLImageElement;
-const loadingImageElement = document.getElementById("loading") as HTMLImageElement;
+const categorySelectElement = document.getElementById("category") as HTMLSelectElement | null;
+const currentImageElement = document.getElementById("img") as HTMLImageElement | null;
+const loadingImageElement = document.getElementById("loading") as HTMLImageElement | null;
 const counterElement = document.getElementById("counter");
 
-if (!nextButtonElement || !backButtonElement || !subSelectElement || !currentImageElement || !loadingImageElement || !counterElement) {
+if (!nextButtonElement || !backButtonElement || !categorySelectElement || !currentImageElement || !loadingImageElement || !counterElement) {
     console.error("Found Dom elements:", {
         nextButtonElement,
         backButtonElement,
-        subSelectElement,
+        subSelectElement: categorySelectElement,
         currentImageElement,
         loadingImageElement,
         counterElement,
@@ -34,29 +34,20 @@ if (!nextButtonElement || !backButtonElement || !subSelectElement || !currentIma
 
 const FALLBACK_IMAGE_URL = "/images/error.png";
 
-// const Observable = Rx.Observable;
-// debugger;
-// debugger;
-// function which returns an array of image URLs for a given reddit sub
-// getSubImages("pics") ->
-// [
-//   "https://upload.wikimedia.org/wikipedia/commons/3/36/Hopetoun_falls.jpg",
-//   "https://upload.wikimedia.org/wikipedia/commons/3/38/4-Nature-Wallpapers-2014-1_ukaavUI.jpg",
-//   ...
-// ]
-function getSubImages(sub: string): Observable<string[]> {
-    const cachedImageUrls = JSON.parse(sessionStorage.getItem(sub) || "[]") as string[];
-    if (cachedImageUrls.length) {
-        console.log({ cachedImageUrls });
-        return of(cachedImageUrls);
-    } else {
-        const subImagesRequestEndpoint = `https://www.reddit.com/r/${sub}/.json?limit=200&show=all`;
+/** Utility to fire a request to a "server" to get the list of image urls in the current category */
+function getCategoryImageUrlsWithPotentialErrors(categoryName: string): Observable<string[]> {
+    const categoryImagesRequestEndpoint = `/categories/${categoryName}.json`;
 
-        // defer ensure new Observable (and therefore) promise gets created for each subscription
-        // rather than sharing the same promise between subscriptions. This ensures functions like retry will issue additional requests.
-        return defer(() =>
-            new Observable<string[]>(({ next, error }) => {
-                fetch(subImagesRequestEndpoint, {
+    // defer ensure new Observable (and therefore) promise gets created for each subscription
+    // rather than sharing the same promise between subscriptions. This ensures functions like retry will issue additional requests.
+    return defer(() =>
+        new Observable<string[]>((subscriber) => {
+            if (Math.random() > 0.8) {
+                const artificialError = "Artificial getCategoryImageUrls error"
+                console.warn(artificialError)
+                subscriber.error(artificialError);
+            } else {
+                fetch(categoryImagesRequestEndpoint, {
                     method: "GET",
                     headers: {
                         // "Content-Type": "application/json",
@@ -64,51 +55,77 @@ function getSubImages(sub: string): Observable<string[]> {
                 })
                     .then((res) => res.json())
                     .then((data) => {
-                        console.log({ subData: data });
-                        const loadedImageUrls: string[] = data.data.children.map((image: any) => image.data.url);
-                        sessionStorage.setItem(sub, JSON.stringify(loadedImageUrls)); // local cache
+                        console.log({ categoryImageUrls: data });
+                        const loadedImageUrls: string[] = data;
+                        sessionStorage.setItem(categoryName, JSON.stringify(loadedImageUrls)); // local cache
                         console.log({ loadedImageUrls });
-                        next(loadedImageUrls);
+                        subscriber.next(loadedImageUrls);
                     })
-                    .catch((e) => {
-                        debugger;
-                        error(e);
+                    .catch((errorReason) => {
+                        subscriber.error(`getCategoryImageUrls error: ${errorReason}`);
                     });
-            }).pipe(
-                // cache in session storage
-                tap((loadedImageUrls) => sessionStorage.setItem(sub, JSON.stringify(loadedImageUrls))),
-            ),
-        );
-    }
+            }
+        }).pipe(
+            // cache in session storage
+            tap((loadedImageUrls) => sessionStorage.setItem(categoryName, JSON.stringify(loadedImageUrls))),
+        ),
+    );
 }
 
-const keyEvent$ = fromEvent<KeyboardEvent>(document, "keyup");
+const generalKeyEvent$ = fromEvent<KeyboardEvent>(document, "keyup").pipe(
+    filter((event) => event.target !== categorySelectElement), 
+);
 
 // user action streams
 const backClick$ = fromEvent(backButtonElement, "click").pipe(share());
-const rightArrowPress$ = keyEvent$.pipe(filter((event) => event.code === KeyCodes.RIGHT));
-const leftArrowPress$ = keyEvent$.pipe(filter((event) => event.code === KeyCodes.LEFT));
-const upArrowPress$ = keyEvent$.pipe(filter((event) => event.code === KeyCodes.UP));
-const downArrowPress$ = keyEvent$.pipe(filter((event) => event.code === KeyCodes.DOWN));
+const rightArrowPress$ = generalKeyEvent$.pipe(filter((event) => event.code === KeyCodes.RIGHT));
+const leftArrowPress$ = generalKeyEvent$.pipe(filter((event) => event.code === KeyCodes.LEFT));
+const upArrowPress$ = generalKeyEvent$.pipe(filter((event) => event.code === KeyCodes.UP));
+const downArrowPress$ = generalKeyEvent$.pipe(filter((event) => event.code === KeyCodes.DOWN));
 const nextClick$ = fromEvent(nextButtonElement, "click").pipe(share());
-const subChange$ = fromEvent(subSelectElement, "change").pipe(share());
-const subNameChange$ = concat(
-    of(subSelectElement.value), // initial sub
+const subChange$ = fromEvent(categorySelectElement, "change").pipe(share());
+const categoryKeyboardChange$ = fromEvent(categorySelectElement, "keyup").pipe(tap((e) => e.preventDefault()));
+ 
+const categoryChange$ = concat(
+    of(categorySelectElement.value), // to load initial category
     subChange$.pipe(map((e) => (e.target! as HTMLSelectElement).value)),
-).pipe(tap((subNameChangeValue) => console.log({ subNameChangeValue })));
+).pipe(
+    tap((subNameChangeValue) => console.log({ subNameChangeValue })),
+    switchMap((newCategory: string) => {
+        return getCategoryImageUrlsWithPotentialErrors(newCategory).pipe(
+            retry(3),
+            map((imageUrls) => {
+                if (!imageUrls.length) {
+                    throw Error(`No image urls loaded for ${newCategory}`);
+                }
+                return { name: newCategory, imageUrls };
+            }),
+        );
+    }),
+);
+
+const LOADING_TIMEOUT_MS = 200;
 
 /** Util to create an image loading observable */
-const loadImageElementUrl = (imgElement: HTMLImageElement, url: string ) => {
+const loadImageElementUrlWithPossibleErrors = (imgElement: HTMLImageElement, url: string) => {
     return new Observable<string>((observer) => {
-        imgElement.onerror = (event) => observer.error({ url, event });
-        imgElement.onload = function () {
-            console.log("image pre-loaded", { url });
-            observer.next(url);
-            // ! dont call observer.complete() as this unsubscribes and removes image even if it was successful
-        };
+        if (Math.random() > 0.5) {
+            const artificialError = "Artificial preload error";
+            console.warn(artificialError);
+            observer.error(artificialError);
+        } else {
+            imgElement.onerror = (event) => observer.error({ url, event });
+            imgElement.onload = function () {
+                console.log("image pre-loaded", { url });
 
-        // start image pre-loading
-        imgElement.src = url;
+                const artificialLoadingDurationMs = Math.random() * LOADING_TIMEOUT_MS * 4; // intentionally large so timeout functionality is used
+                setTimeout(() => observer.next(url), artificialLoadingDurationMs);
+                // ! dont call observer.complete() as this unsubscribes and removes image even if it was successful
+            };
+
+            // start image pre-loading
+            imgElement.src = url;
+        }
 
         const unsubscriber = () => {
             // removes listeners
@@ -122,9 +139,10 @@ const loadImageElementUrl = (imgElement: HTMLImageElement, url: string ) => {
 };
 
 // preload url using dummy image element
-const preloadImageUrlOrFallback = (url: string ) => {
-    return loadImageElementUrl(new Image(), url ).pipe(
-        timeout({ first: 500 }),
+const preloadImageUrlOrFallback = (url: string) => {
+    return loadImageElementUrlWithPossibleErrors(new Image(), url).pipe(
+        // set the timeout for the process
+        timeout({ first: LOADING_TIMEOUT_MS }),
         // retry twice before actually throwing if loading failed
         retry(2),
         // use fallback if it really failed to load
@@ -141,87 +159,84 @@ const preloadImageUrlOrFallback = (url: string ) => {
 const userActionCode$ = merge(
     merge(backClick$, leftArrowPress$).pipe(map(() => UserAction.Previous)),
     merge(nextClick$, rightArrowPress$).pipe(map(() => UserAction.Next)),
-    subNameChange$.pipe(map(() => UserAction.ChangeSub)),
+    categoryChange$.pipe(map(() => UserAction.ChangeCategory)),
 ).pipe(tap((navigationActionCode) => console.log({ navigationActionCode })));
 
-/** API call to get image url array */
-const imageListLoad$ = subNameChange$.pipe(
-    tap((imageListLoadSub) => console.log({ imageListLoadSub })),
-    // if getting the images fails, retries up to 3 times before actually throwing
-    switchMap((sub: string) => getSubImages(sub).pipe(retry(3))),
-);
+type CategoryData = {
+    name: string;
+    imageUrls: string[];
+};
 
 const START_INDEX = 0;
 
 /** Stream of image changes, gets the latest value of each stream */
-const currentImageChange$ = combineLatest([userActionCode$, imageListLoad$, subNameChange$]).pipe(
+const currentImageChange$ = combineLatest([userActionCode$, categoryChange$]).pipe(
     // equivalent to reduce for arrays
     scan(
-        (currentAccumulatedState, newIncomingState) => {
-            const [actionCode, newImageUrls, newSub] = newIncomingState;
-            const { index: oldIndex, sub: oldSub } = currentAccumulatedState;
+        (currentAccumulatedState, newIncomingState, eventIndex) => {
+            const [actionCode, newCategory] = newIncomingState;
+            const { index: oldIndex, categoryData: oldCategoryData } = currentAccumulatedState;
 
             const getNewBoundedIndex = () => {
                 const delta = actionCode === UserAction.Next ? 1 : -1;
                 const newIndex = oldIndex + delta;
-                return Math.min(Math.max(newIndex, START_INDEX), newImageUrls.length - 1);
+                return Math.min(Math.max(newIndex, START_INDEX), newCategory.imageUrls.length - 1);
             };
 
             // new index, if it is 0 then this means go to initial index
-            const newIndex = actionCode === UserAction.ChangeSub ? START_INDEX : getNewBoundedIndex();
+            const newIndex = actionCode === UserAction.ChangeCategory ? START_INDEX : getNewBoundedIndex();
+
+            console.log({ eventIndex, newIncomingState, currentAccumulatedState, newIndex });
 
             return {
                 index: newIndex,
-                sub: newSub,
-                images: [...newImageUrls],
+                categoryData: newCategory,
                 indexChanged: oldIndex !== newIndex,
-                subChanged: oldSub !== newSub,
+                categoryChanged: oldCategoryData?.name !== newCategory.name,
             };
         },
         { index: START_INDEX } as {
             index: number;
-            images: string[];
-            sub: string;
+            categoryData: CategoryData;
             indexChanged: boolean;
-            subChanged: boolean;
+            categoryChanged: boolean;
         },
     ),
     // filter out events that don't change anything
-    filter(({ indexChanged, subChanged }) => indexChanged || subChanged),
+    filter(({ indexChanged, categoryChanged, categoryData }) => {
+        return indexChanged || categoryChanged;
+    }),
     // show loader and update counter when there is definitely a change incoming
-    tap(({ index, images, subChanged }) => {
-        counterElement.innerText = `${index + 1}/${images.length}`;
+    tap(({ index, categoryData }) => {
+        counterElement.innerText = `${index}/${categoryData?.imageUrls.length - 1}`;
         loadingImageElement.style.visibility = "visible";
         // dont show an image when loading a new one
         currentImageElement.src = "";
     }),
-    // switch to latest image if there are changes
-    switchMap(({ index, images, sub }) => {
-        const currentImageToLoad = images[index];
-        // preload image url in a dummy img element
-        return preloadImageUrlOrFallback(currentImageToLoad, ).pipe(
-            // then load the preloaded url (or fallback url if fa) into actual current image element
-            // switchMap((preloadedImgUrl) => loadImageElementUrl(currentImageElement, preloadedImgUrl)),
 
+    // switch to latest image if there are changes
+    switchMap(({ index, categoryData }) => {
+        const currentImageToLoad = categoryData.imageUrls[index];
+        // preload image url in a dummy img element
+        return preloadImageUrlOrFallback(currentImageToLoad).pipe(
             // data format to send to subscriber about change
             map((imageUrl) => ({
                 index,
-                images,
-                sub,
+                categoryData,
                 currentImageUrl: imageUrl,
             })),
         );
     }),
     // apply new image
-    tap(({ currentImageUrl, sub, index }) => {
+    tap(({ currentImageUrl, categoryData, index }) => {
         currentImageElement.src = currentImageUrl;
-        currentImageElement.alt = `${sub}-${index}`
+        currentImageElement.alt = `${categoryData.name}-${index}`;
         loadingImageElement.style.visibility = "hidden";
     }),
     // make sure fallback is set even if another error occurs
     catchError((e) => {
         currentImageElement.src = FALLBACK_IMAGE_URL;
-        throw Error(`An error ocurred outside of image loading: ${e}`);
+        throw Error(`An unhandled error with the observable pipeline occurred: ${e}`);
     }),
 );
 
@@ -229,8 +244,14 @@ console.log("before subscribe");
 const subscription = currentImageChange$.subscribe({
     next(imageChangeData) {
         console.log("image changed", { imageChangeData });
+        console.log("-".repeat(100));
     },
     error(error) {
         console.error("image change error", { error });
+        console.log("-".repeat(100));
+    },
+    complete() {
+        console.error("completed");
+        console.log("-".repeat(100));
     },
 });

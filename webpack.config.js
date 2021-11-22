@@ -1,18 +1,25 @@
 const path = require("path");
- 
+
 module.exports = {
     entry: "./src/index.ts",
-    devtool: 'inline-source-map',
+    devtool: "inline-source-map",
+    //default mode is production
+    mode: "development",
     output: {
-        path: path.resolve(__dirname, "public"),
+        path: path.resolve(__dirname, "dist"),
         filename: "index.js",
     },
     resolve: {
         extensions: [".ts", ".js", ".tsx"],
+        fallback: { path: require.resolve("path-browserify"), fs: false },
     },
-
-    //default mode is production
-    mode: "development",
+    devServer: {
+        static: {
+            directory: path.join(__dirname, "public"),
+        },
+        // compress: true,
+        // port: 9000,
+    },
     module: {
         rules: [
             {
@@ -36,17 +43,15 @@ module.exports = {
                     {
                         loader: "file-loader",
                         options: {
-                            outputPath: "public/images",
+                            outputPath: "dist/images",
                         },
                     },
                 ],
             },
             {
-  test:/\.html$/,
-  use: [
-    'html-loader'
-  ]
-},
+                test: /\.html$/,
+                use: ["html-loader"],
+            },
         ],
     },
 };
