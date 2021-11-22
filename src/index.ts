@@ -53,8 +53,7 @@ const subChange$ = fromEvent(categorySelectElement, "change");
 const categoryChange$ = concat(
     of(categorySelectElement.value), // to load initial category
     subChange$.pipe(map((e) => (e.target! as HTMLSelectElement).value)),
-).pipe(
-    tap((subNameChangeValue) => console.log({ subNameChangeValue })),
+).pipe( 
     switchMap((newCategory: string) => {
         return getCategoryImageUrlsWithPotentialErrors(newCategory).pipe(
             retry(3),
@@ -130,7 +129,7 @@ const currentImageChange$ = combineLatest([userActionCode$, categoryChange$]).pi
         },
     ),
 
-    // filter out events that don't change anything
+    // filter out events that don't change anything, e.g. a next event when the index has reached the limits
     filter(({ indexChanged, categoryChanged, }) => indexChanged || categoryChanged),
 
     // show loader and update counter when there is definitely a change incoming
