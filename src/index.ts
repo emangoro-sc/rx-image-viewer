@@ -58,7 +58,7 @@ const categoryChange$ = concat(
         return getCategoryImageUrlsWithPotentialErrors(newCategory).pipe(
             retry(Infinity), // ie retry until it works
             map((imageUrls) => ({ name: newCategory, imageUrls })),
-        // ! if retries are finite
+            // ! if retries are finite
             // catchError(error => {
             //     alert(`No image urls could be loaded for "${newCategory}" category, try again soon`);
             //     throw Error(`getCategoryImageUrls Error: ${error}`)
@@ -79,7 +79,7 @@ const preloadImageUrlOrFallback = (url: string) => {
         timeout({ first: IMAGE_LOADING_TIMEOUT_MS * 3 }), 
         // use fallback if it really failed to load
         catchError((error) => {
-            console.error("preloadImageUrlOrFallback", error);
+            console.error("preloadImageUrlOrFallback, using fallback because of error:", error);
             return of(FALLBACK_IMAGE_URL);
         }),
     );

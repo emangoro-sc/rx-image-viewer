@@ -8,7 +8,8 @@ function getCategoryImageUrlsWithPotentialErrors(categoryName: string): Observab
     // rather than sharing the same promise between subscriptions. This ensures functions like retry will issue additional requests.
     return defer(() =>
         new Observable<string[]>((subscriber) => {
-            if (Math.random() > 0.2) {
+            // fails about 80% of times
+            if (Math.random() < 0.8) {
                 const artificialError = "Artificial getCategoryImageUrls server error"
                 console.warn(artificialError)
                 subscriber.error(artificialError);

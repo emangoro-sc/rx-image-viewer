@@ -4,7 +4,8 @@ import { IMAGE_LOADING_TIMEOUT_MS } from "..";
 /** Util to create an image loading observable */
 const loadImageElementUrlWithPossibleErrors = (imgElement: HTMLImageElement, url: string) => {
     return new Observable<string>((observer) => {
-        if (Math.random() > 0.2) {
+        // fails about 80% of times
+        if (Math.random() < 0.8) {
             const artificialError = "Artificial image load error";
             console.warn(artificialError);
             observer.error(artificialError);
