@@ -56,12 +56,13 @@ const categoryChange$ = concat(
 ).pipe( 
     switchMap((newCategory: string) => {
         return getCategoryImageUrlsWithPotentialErrors(newCategory).pipe(
-            retry(3),
+            retry(Infinity), // ie retry until it works
             map((imageUrls) => ({ name: newCategory, imageUrls })),
-            catchError(error => {
-                alert(`No image urls could be loaded for "${newCategory}" category, try again soon`);
-                throw Error(`getCategoryImageUrls Error: ${error}`)
-            })
+        // ! if retries are finite
+            // catchError(error => {
+            //     alert(`No image urls could be loaded for "${newCategory}" category, try again soon`);
+            //     throw Error(`getCategoryImageUrls Error: ${error}`)
+            // })
         );
     }),
 );
@@ -70,10 +71,12 @@ const categoryChange$ = concat(
 const preloadImageUrlOrFallback = (url: string) => {
     // use a dummy image element so the image request gets cached by browser
     return loadImageElementUrlWithPossibleErrors(new Image(), url).pipe(
-        // set the timeout for the process
+        // set the timeout for loading an image
         timeout({ first: IMAGE_LOADING_TIMEOUT_MS }),
         // retry twice before actually throwing if loading failed
-        retry(2),
+        retry(Infinity),
+        // set the timeout for loading an image with retries, ie maximum wait time before showing the placeholder
+        timeout({ first: IMAGE_LOADING_TIMEOUT_MS * 3 }), 
         // use fallback if it really failed to load
         catchError((error) => {
             console.error("preloadImageUrlOrFallback", error);
@@ -101,7 +104,7 @@ const currentImageChange$ = combineLatest([userActionCode$, categoryChange$]).pi
 
     // equivalent to reduce for arrays
     scan(
-        (currentAccumulatedState, newIncomingState, eventIndex) => {
+        (currentAccumulatedState, newIncomingState) => {
             const [actionCode, newCategory] = newIncomingState;
             const { index: oldIndex, categoryData: oldCategoryData } = currentAccumulatedState;
 
